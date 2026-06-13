@@ -36,6 +36,8 @@ export interface Config {
   defaultModel: string;
   maxSteps: number;
   execTimeoutS: number;
+  /** Base URL of the swarm dashboard website (Vercel). Used to build per-session links. */
+  dashboardUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -59,6 +61,7 @@ export function loadConfig(): Config {
     defaultModel: process.env.TELEMACHUS_MODEL || "openrouter:moonshotai/kimi-k2.7-code",
     maxSteps: Math.max(1, parseInt(process.env.TELEMACHUS_MAX_STEPS || "12", 10)),
     execTimeoutS: Math.max(5, parseInt(process.env.TELEMACHUS_EXEC_TIMEOUT_S || "180", 10)),
+    dashboardUrl: (process.env.DASHBOARD_URL || "").replace(/\/+$/, ""),
   };
 }
 

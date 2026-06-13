@@ -12,7 +12,11 @@ import { createProvider, parseModelRef } from "./providers";
 import { DaytonaSandbox } from "./daytona";
 import { functionalModels, labelFor } from "./models";
 import { runAgent, SYSTEM_PROMPT } from "./agent";
+import { runSwarm, type SwarmEvent } from "./swarm";
 import { TelegramClient, chunkMessage, type TgUpdate, type InlineButton } from "./telegram";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 interface Session {
   modelRef: string;
@@ -26,6 +30,7 @@ const COMMANDS = [
   { command: "start", description: "Welcome + current model" },
   { command: "help", description: "How to use Telemachus" },
   { command: "models", description: "List & switch the AI model" },
+  { command: "swarm", description: "Run a multi-subagent swarm (live web dashboard)" },
   { command: "settings", description: "View settings / switch model / new session" },
   { command: "status", description: "Current model, sandbox, busy state" },
   { command: "stop", description: "Stop the agent's current task" },
@@ -158,6 +163,14 @@ export class TelemachusBot {
         );
         return;
       }
+      case "swarm": {
+        const arg = text.replace(/^\/swarm(@\w+)?\s*/i, "").trim();
+        if (!arg) {
+          await this.tg.sendMessage(chatId, "Usage: /swarm <task>\n\nI'll split it across a team of subagents and stream each one's terminal live to your web dashboard. (You can also just say: \"use agent swarm <task>\".)");
+          return;
+        }
+        return this.runSwarmSession(chatId, s, arg);
+      }
       case "stop":
         if (s.busy && s.abort) {
           s.abort.abort();
@@ -234,6 +247,11 @@ export class TelemachusBot {
 
   private async onPrompt(chatId: number, text: string): Promise<void> {
     const s = this.session(chatId);
+    // Natural-language swarm trigger: "use agent swarm <task>" / "swarm: <task>".
+    const swarmMatch = text.match(/^\s*(?:use\s+(?:the\s+)?agent\s+swarm|agent\s+swarm|swarm)\s*[:,-]?\s+([\s\S]+)/i);
+    if (swarmMatch && swarmMatch[1].trim().length > 3) {
+      return this.runSwarmSession(chatId, s, swarmMatch[1].trim());
+    }
     if (s.busy) {
       await this.tg.sendMessage(chatId, "I'm still working on the previous task. Use /stop to cancel it first.");
       return;
@@ -298,6 +316,92 @@ export class TelemachusBot {
       }
     } catch (err) {
       await this.tg.sendMessage(chatId, `⚠️ Error: ${(err as Error).message}`);
+    } finally {
+      s.busy = false;
+      s.abort = undefined;
+    }
+  }
+
+  /* ── agent swarm (multi-subagent, live web dashboard) ── */
+
+  private async runSwarmSession(chatId: number, s: Session, task: string): Promise<void> {
+    if (s.busy) {
+      await this.tg.sendMessage(chatId, "I'm still working on the previous task. Use /stop first.");
+      return;
+    }
+    s.busy = true;
+    s.abort = new AbortController();
+
+    // Per-session event log the dashboard reads (one JSON event per line).
+    const session = `${chatId}-${Date.now().toString(36)}`;
+    const dir = path.join(os.homedir(), "swarm");
+    fs.mkdirSync(dir, { recursive: true });
+    const logFile = path.join(dir, `${session}.jsonl`);
+    fs.writeFileSync(logFile, "");
+    const publish = (ev: SwarmEvent) => {
+      try { fs.appendFileSync(logFile, JSON.stringify(ev) + "\n"); } catch { /* ignore */ }
+    };
+
+    const link = this.config.dashboardUrl ? `${this.config.dashboardUrl}/?s=${encodeURIComponent(session)}` : "";
+    await this.tg.sendMessage(
+      chatId,
+      `🐝 Agent swarm starting.\nTask: ${task.slice(0, 200)}\n\n` +
+        (link
+          ? `📺 Live dashboard (one terminal per subagent):\n${link}\n\nOpen it to watch each subagent's role, commands, and output stream in real time.`
+          : "⚠️ DASHBOARD_URL is not set, so there's no web view — I'll still run the swarm and send the result here."),
+      { disablePreview: true }
+    );
+
+    // Compact Telegram progress that edits in place as panes change state.
+    const progress = await this.tg.sendMessage(chatId, "🐝 Planning the split…");
+    const panes = new Map<number, { role: string; status: string; lastCmd?: string }>();
+    let planTask = task;
+    let lastEdit = 0, editing = false;
+    const render = () => {
+      const rows = [...panes.entries()].sort((a, b) => a[0] - b[0]).map(([p, v]) => {
+        const glyph = v.status === "done" ? "✅" : v.status === "failed" ? "❌" : v.status === "running" ? "⚙️" : v.status === "stopped" ? "🛑" : "•";
+        return `${glyph} ${v.role}${v.lastCmd ? `  ·  $ ${v.lastCmd.slice(0, 40)}` : ""}`;
+      });
+      return `🐝 Swarm · ${panes.size} subagent(s)\n────────────\n${rows.join("\n") || "planning…"}`;
+    };
+    const pushEdit = async (force = false) => {
+      const n = Date.now();
+      if (!force && (editing || n - lastEdit < 1800)) return;
+      editing = true; lastEdit = n;
+      await this.tg.editMessageText(chatId, progress.message_id, render()).catch(() => {});
+      editing = false;
+    };
+
+    try {
+      const result = await runSwarm(
+        this.config,
+        task,
+        { session, signal: s.abort.signal },
+        (ev) => {
+          publish(ev);
+          if (ev.type === "plan") {
+            planTask = ev.task;
+            for (const p of ev.panes) panes.set(p.pane, { role: p.role, status: "queued" });
+          } else if (ev.type === "assign") {
+            panes.set(ev.pane, { role: ev.role, status: "running" });
+          } else if (ev.type === "status") {
+            const v = panes.get(ev.pane); if (v) v.status = ev.status;
+          } else if (ev.type === "cmd") {
+            const v = panes.get(ev.pane); if (v) v.lastCmd = ev.text;
+            this.tg.sendChatAction(chatId, "typing");
+          }
+          void pushEdit();
+        }
+      );
+      await pushEdit(true);
+
+      const filesBlock = result.files.length ? `\n\n📁 Files:\n` + result.files.slice(0, 40).map((f) => `• ${f}`).join("\n") : "";
+      for (const chunk of chunkMessage((result.text || "(no output)") + filesBlock)) {
+        await this.tg.sendMessage(chatId, chunk);
+      }
+      if (link) await this.tg.sendMessage(chatId, `📺 Dashboard (replay): ${link}`, { disablePreview: true });
+    } catch (err) {
+      await this.tg.sendMessage(chatId, `⚠️ Swarm error: ${(err as Error).message}`);
     } finally {
       s.busy = false;
       s.abort = undefined;
