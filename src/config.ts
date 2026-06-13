@@ -1,0 +1,64 @@
+import * as fs from "fs";
+import * as path from "path";
+
+/** Minimal .env loader (no dependency): KEY=VALUE lines, # comments, optional quotes. */
+export function loadEnvFile(file = path.resolve(process.cwd(), ".env")): void {
+  if (!fs.existsSync(file)) return;
+  for (const raw of fs.readFileSync(file, "utf-8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let val = line.slice(eq + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = val;
+  }
+}
+
+export interface Config {
+  telegramToken: string;
+  allowedChatIds: number[];
+  daytonaKey: string;
+  daytonaUrl: string;
+  daytonaSnapshot?: string;
+  daytonaTarget?: string;
+  nvidiaKey: string;
+  openrouterKey: string;
+  defaultModel: string;
+  maxSteps: number;
+  execTimeoutS: number;
+}
+
+export function loadConfig(): Config {
+  loadEnvFile();
+  const ids = (process.env.TELEGRAM_ALLOWED_CHAT_IDS || "")
+    .split(",")
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isFinite(n));
+  return {
+    telegramToken: process.env.TELEGRAM_BOT_TOKEN || "",
+    allowedChatIds: ids,
+    daytonaKey: process.env.DAYTONA_API_KEY || "",
+    daytonaUrl: (process.env.DAYTONA_API_URL || "https://app.daytona.io/api").replace(/\/+$/, ""),
+    daytonaSnapshot: process.env.DAYTONA_SNAPSHOT || undefined,
+    daytonaTarget: process.env.DAYTONA_TARGET || undefined,
+    nvidiaKey: process.env.NVIDIA_API_KEY || "",
+    openrouterKey: process.env.OPENROUTER_API_KEY || "",
+    defaultModel: process.env.TELEMACHUS_MODEL || "nvidia:moonshotai/kimi-k2.6",
+    maxSteps: Math.max(1, parseInt(process.env.TELEMACHUS_MAX_STEPS || "12", 10)),
+    execTimeoutS: Math.max(5, parseInt(process.env.TELEMACHUS_EXEC_TIMEOUT_S || "180", 10)),
+  };
+}
+
+/** Human-readable list of what's missing, for a friendly startup error. */
+export function validateConfig(c: Config): string[] {
+  const missing: string[] = [];
+  if (!c.telegramToken) missing.push("TELEGRAM_BOT_TOKEN");
+  if (c.allowedChatIds.length === 0) missing.push("TELEGRAM_ALLOWED_CHAT_IDS");
+  if (!c.daytonaKey) missing.push("DAYTONA_API_KEY");
+  if (!c.nvidiaKey && !c.openrouterKey) missing.push("NVIDIA_API_KEY or OPENROUTER_API_KEY");
+  return missing;
+}
