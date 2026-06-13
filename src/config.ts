@@ -25,6 +25,12 @@ export interface Config {
   daytonaUrl: string;
   daytonaSnapshot?: string;
   daytonaTarget?: string;
+  /** Sandbox scratch disk in GB (0 = Daytona default ~3). Quota-bound. */
+  daytonaDiskGb: number;
+  /** Daytona Volume name to mount for large persistent (S3-backed) storage. */
+  daytonaVolume?: string;
+  /** Where the volume is mounted inside the sandbox. */
+  daytonaVolumeMount: string;
   nvidiaKey: string;
   openrouterKey: string;
   defaultModel: string;
@@ -45,6 +51,9 @@ export function loadConfig(): Config {
     daytonaUrl: (process.env.DAYTONA_API_URL || "https://app.daytona.io/api").replace(/\/+$/, ""),
     daytonaSnapshot: process.env.DAYTONA_SNAPSHOT || undefined,
     daytonaTarget: process.env.DAYTONA_TARGET || undefined,
+    daytonaDiskGb: Math.max(0, parseInt(process.env.DAYTONA_DISK_GB || "0", 10) || 0),
+    daytonaVolume: process.env.DAYTONA_VOLUME || undefined,
+    daytonaVolumeMount: process.env.DAYTONA_VOLUME_MOUNT || "/data",
     nvidiaKey: process.env.NVIDIA_API_KEY || "",
     openrouterKey: process.env.OPENROUTER_API_KEY || "",
     defaultModel: process.env.TELEMACHUS_MODEL || "nvidia:moonshotai/kimi-k2.6",

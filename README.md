@@ -59,6 +59,23 @@ Requires **Node.js 18+** (uses the built-in `fetch`).
 | `TELEMACHUS_MODEL` | – | Starting model, e.g. `nvidia:moonshotai/kimi-k2.6`. Switchable in chat. |
 | `TELEMACHUS_MAX_STEPS` | – | Max tool-loop steps per task (default 12). |
 | `TELEMACHUS_EXEC_TIMEOUT_S` | – | Per-command timeout in the sandbox (default 180). |
+| `DAYTONA_DISK_GB` | – | Sandbox scratch disk in GB (0 = Daytona default ~3GB; quota-bound). |
+| `DAYTONA_VOLUME` | – | Name of a Daytona **Volume** (S3-backed, effectively unlimited) auto-created and mounted for large persistent storage. |
+| `DAYTONA_VOLUME_MOUNT` | – | Where the volume mounts in the sandbox (default `/data`). |
+
+### Large / persistent storage
+
+A sandbox's own disk is small (~3GB) and ephemeral. For big or long-lived data, set
+`DAYTONA_VOLUME` to a name (e.g. `telemachus-data`). Telemachus creates that
+[Daytona Volume](https://www.daytona.io/docs) on first use and mounts it at `/data`
+in every sandbox. Volumes are **S3-backed object storage — effectively unlimited
+(1TB+), persistent across sessions, and shared between sandboxes** — and they use the
+Daytona key you already have (no extra service or credentials). The agent is told to
+keep datasets, caches, and big files under `/data`.
+
+Prefer an external provider? You can instead have the agent use `rclone`/`aws s3`
+against Cloudflare R2, Backblaze B2, or AWS S3 — just provide those credentials as
+env vars and ask it to configure rclone in the sandbox.
 
 > **Secrets stay in the environment.** Nothing is hardcoded or committed; `.env` is
 > git-ignored. If a token ever leaks, revoke it (Telegram: @BotFather → `/revoke`).

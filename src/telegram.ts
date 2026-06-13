@@ -20,6 +20,7 @@ export interface TgMessage {
   from?: TgUser;
   chat: TgChat;
   text?: string;
+  date?: number;
 }
 export interface TgCallbackQuery {
   id: string;

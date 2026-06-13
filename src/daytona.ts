@@ -16,6 +16,12 @@ export interface DaytonaOptions {
   apiUrl: string;
   snapshot?: string;
   target?: string;
+  /** Scratch disk in GB (0 = Daytona default). */
+  diskGb?: number;
+  /** Name of a Daytona Volume (S3-backed) to mount for large persistent storage. */
+  volumeName?: string;
+  /** Mount path for the volume inside the sandbox (default /data). */
+  volumeMount?: string;
 }
 
 export class DaytonaSandbox {
@@ -63,6 +69,20 @@ export class DaytonaSandbox {
         };
         if (this.opts.snapshot) body.snapshot = this.opts.snapshot;
         if (this.opts.target) body.target = this.opts.target;
+        if (this.opts.diskGb && this.opts.diskGb > 0) body.disk = this.opts.diskGb;
+        // Mount a large S3-backed Daytona Volume for persistent storage (1TB+),
+        // created on first use. Best-effort: if it can't be prepared, the sandbox
+        // still launches on its local disk.
+        if (this.opts.volumeName) {
+          try {
+            await this.ensureVolume(this.opts.volumeName);
+            body.volumes = [
+              { volumeId: this.opts.volumeName, mountPath: this.opts.volumeMount || "/data" },
+            ];
+          } catch (err) {
+            console.error("daytona volume mount skipped:", (err as Error).message);
+          }
+        }
         const sb = await this.api("POST", "/sandbox", body);
         const id: string = sb.id;
         const deadline = Date.now() + 120_000;
@@ -83,6 +103,28 @@ export class DaytonaSandbox {
       this.creating.catch(() => (this.creating = null));
     }
     return this.creating;
+  }
+
+  /** Ensure a named Daytona Volume exists and is ready to mount (creates if absent). */
+  private async ensureVolume(name: string): Promise<void> {
+    let vol = await this.api("GET", `/volumes/by-name/${encodeURIComponent(name)}`).catch(() => null);
+    if (!vol || !vol.id) {
+      vol = await this.api("POST", "/volumes", { name }).catch(async (e) => {
+        // Race / already-exists → re-fetch.
+        const again = await this.api("GET", `/volumes/by-name/${encodeURIComponent(name)}`).catch(() => null);
+        if (again?.id) return again;
+        throw e;
+      });
+    }
+    // Wait until the volume is ready (S3 bucket provisioned).
+    const deadline = Date.now() + 60_000;
+    let state: string = vol?.state ?? "";
+    while (state && state !== "ready" && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const cur = await this.api("GET", `/volumes/by-name/${encodeURIComponent(name)}`).catch(() => null);
+      state = cur?.state ?? state;
+      if (cur?.errorReason) throw new Error(`volume ${name}: ${cur.errorReason}`);
+    }
   }
 
   async run(command: string, timeoutMs = 180_000): Promise<ExecResult> {

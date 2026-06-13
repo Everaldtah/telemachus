@@ -25,7 +25,7 @@ interface Session {
 const COMMANDS = [
   { command: "start", description: "Welcome + current model" },
   { command: "help", description: "How to use Telemachus" },
-  { command: "model", description: "Switch the AI model" },
+  { command: "models", description: "List & switch the AI model" },
   { command: "settings", description: "View settings / switch model / new session" },
   { command: "status", description: "Current model, sandbox, busy state" },
   { command: "stop", description: "Stop the agent's current task" },
@@ -38,13 +38,31 @@ export class TelemachusBot {
   constructor(private config: Config, private tg: TelegramClient) {}
 
   async start(): Promise<void> {
-    const me = await this.tg.getMe();
-    await this.tg.setMyCommands(COMMANDS);
-    console.log(`Telemachus online as @${me.username}. Allowed chats: ${this.config.allowedChatIds.join(", ")}`);
+    // Best-effort identity/command registration — a transient network blip here must
+    // NOT kill the bot; the poll loop below tolerates and retries network errors.
+    let who = "the bot";
+    try {
+      const me = await this.tg.getMe();
+      who = `@${me.username}`;
+    } catch (err) {
+      console.error("startup getMe failed (continuing):", (err as Error).message);
+    }
+    await this.tg.setMyCommands(COMMANDS).catch(() => {});
+    console.log(`Telemachus online as ${who}. Allowed chats: ${this.config.allowedChatIds.join(", ")}`);
     let offset = 0;
-    // Drain any backlog so we don't replay old messages on restart.
-    const backlog = await this.tg.getUpdates(0, 0).catch(() => []);
-    if (backlog.length) offset = backlog[backlog.length - 1].update_id + 1;
+    // On startup, process messages from the last 10 minutes (so a message you just
+    // sent gets answered) but skip anything older, so a restart doesn't replay a
+    // long backlog of stale commands.
+    try {
+      const backlog = await this.tg.getUpdates(0, 0);
+      if (backlog.length) {
+        const cutoff = Date.now() / 1000 - 600;
+        const recent = backlog.find((u) => (u.message?.date ?? (u.callback_query ? cutoff : 0)) >= cutoff);
+        offset = recent ? recent.update_id : backlog[backlog.length - 1].update_id + 1;
+      }
+    } catch {
+      /* ignore — start from 0 */
+    }
     for (;;) {
       let updates: TgUpdate[] = [];
       try {
@@ -68,14 +86,21 @@ export class TelemachusBot {
   private session(chatId: number): Session {
     let s = this.sessions.get(chatId);
     if (!s) {
+      const storageNote = this.config.daytonaVolume
+        ? `\n\nLarge persistent storage (S3-backed, effectively unlimited) is mounted at ${this.config.daytonaVolumeMount}. ` +
+          `Put datasets, build caches, and any big or long-lived files there — it survives across sessions. The sandbox's own disk is small, so don't fill it.`
+        : "";
       s = {
         modelRef: this.config.defaultModel,
-        history: [{ role: "system", content: SYSTEM_PROMPT }],
+        history: [{ role: "system", content: SYSTEM_PROMPT + storageNote }],
         sandbox: new DaytonaSandbox({
           apiKey: this.config.daytonaKey,
           apiUrl: this.config.daytonaUrl,
           snapshot: this.config.daytonaSnapshot,
           target: this.config.daytonaTarget,
+          diskGb: this.config.daytonaDiskGb,
+          volumeName: this.config.daytonaVolume,
+          volumeMount: this.config.daytonaVolumeMount,
         }),
         busy: false,
       };
@@ -122,6 +147,7 @@ export class TelemachusBot {
         );
         return;
       case "model":
+      case "models":
       case "settings":
         await this.showSettings(chatId, s);
         return;
