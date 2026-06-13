@@ -3,6 +3,13 @@
  * For the /model menu we show only models that (a) you have a key for and (b) the
  * provider's live /models endpoint currently reports — so dead/EOL models (e.g. a
  * retired NIM model returning 410) never appear.
+ *
+ * NOTE: when Telemachus runs in a Daytona sandbox (EU region), NVIDIA NIM
+ * (integrate.api.nvidia.com) is UNREACHABLE — the egress resets the TCP connection
+ * (verified 2026-06-13), causing "fetch failed". OpenRouter is reachable, so the
+ * catalog and default model are OpenRouter-only. Every entry below was verified with
+ * a real chat completion FROM THE SANDBOX. (NVIDIA refs still work via the provider
+ * if you ever run the bot somewhere with NVIDIA egress.)
  */
 import type { Config } from "./config";
 import { createProvider } from "./providers";
@@ -12,20 +19,18 @@ export interface CatalogModel {
   label: string; // short display label
 }
 
-/** Hand-picked strong coding/reasoning frontier models, by provider. */
+/** Strong coding/reasoning frontier models — all verified functional via OpenRouter
+ *  from inside the Daytona sandbox (2026-06-13). */
 export const CANDIDATES: CatalogModel[] = [
-  // NVIDIA NIM
-  { ref: "nvidia:moonshotai/kimi-k2.6", label: "kimi-k2.6 (nvidia)" },
-  { ref: "nvidia/nemotron-3-ultra-550b-a55b", label: "nemotron-3-ultra (nvidia)" },
-  { ref: "nvidia:meta/llama-3.3-70b-instruct", label: "llama-3.3-70b (nvidia)" },
-  { ref: "nvidia:qwen/qwen3-coder-480b-a35b-instruct", label: "qwen3-coder-480b (nvidia)" },
-  { ref: "nvidia:deepseek-ai/deepseek-v4-pro", label: "deepseek-v4-pro (nvidia)" },
-  // OpenRouter
+  { ref: "openrouter:moonshotai/kimi-k2.7-code", label: "kimi-k2.7-code (openrouter)" },
   { ref: "openrouter:moonshotai/kimi-k2", label: "kimi-k2 (openrouter)" },
-  { ref: "openrouter:deepseek/deepseek-chat", label: "deepseek-chat (openrouter)" },
+  { ref: "openrouter:deepseek/deepseek-chat", label: "deepseek-v3 chat (openrouter)" },
+  { ref: "openrouter:deepseek/deepseek-r1", label: "deepseek-r1 (openrouter)" },
   { ref: "openrouter:qwen/qwen-2.5-coder-32b-instruct", label: "qwen2.5-coder-32b (openrouter)" },
-  { ref: "openrouter:anthropic/claude-3.7-sonnet", label: "claude-3.7-sonnet (openrouter)" },
+  { ref: "openrouter:qwen/qwen-2.5-72b-instruct", label: "qwen2.5-72b (openrouter)" },
+  { ref: "openrouter:meta-llama/llama-3.3-70b-instruct", label: "llama-3.3-70b (openrouter)" },
   { ref: "openrouter:google/gemini-2.5-flash", label: "gemini-2.5-flash (openrouter)" },
+  { ref: "openrouter:openai/gpt-4o-mini", label: "gpt-4o-mini (openrouter)" },
 ];
 
 function normalize(ref: string): string {

@@ -56,7 +56,7 @@ export function loadConfig(): Config {
     daytonaVolumeMount: process.env.DAYTONA_VOLUME_MOUNT || "/data",
     nvidiaKey: process.env.NVIDIA_API_KEY || "",
     openrouterKey: process.env.OPENROUTER_API_KEY || "",
-    defaultModel: process.env.TELEMACHUS_MODEL || "nvidia:moonshotai/kimi-k2.6",
+    defaultModel: process.env.TELEMACHUS_MODEL || "openrouter:moonshotai/kimi-k2.7-code",
     maxSteps: Math.max(1, parseInt(process.env.TELEMACHUS_MAX_STEPS || "12", 10)),
     execTimeoutS: Math.max(5, parseInt(process.env.TELEMACHUS_EXEC_TIMEOUT_S || "180", 10)),
   };
