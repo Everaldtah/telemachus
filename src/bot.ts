@@ -7,6 +7,7 @@
  * models your keys can actually reach.
  */
 import type { Config } from "./config";
+import { providerKeys } from "./config";
 import type { Message, Provider } from "./types";
 import { createProvider, parseModelRef } from "./providers";
 import { DaytonaSandbox } from "./daytona";
@@ -115,7 +116,7 @@ export class TelemachusBot {
   }
 
   private provider(s: Session): Provider {
-    return createProvider(s.modelRef, { nvidia: this.config.nvidiaKey, openrouter: this.config.openrouterKey });
+    return createProvider(s.modelRef, providerKeys(this.config));
   }
 
   private async handle(u: TgUpdate): Promise<void> {
@@ -218,7 +219,7 @@ export class TelemachusBot {
     if (data.startsWith("m:")) {
       const ref = data.slice(2);
       // Validate the key/endpoint before committing the switch.
-      const ok = await createProvider(ref, { nvidia: this.config.nvidiaKey, openrouter: this.config.openrouterKey })
+      const ok = await createProvider(ref, providerKeys(this.config))
         .healthCheck()
         .catch(() => ({ ok: false, detail: "unreachable" }));
       if (!ok.ok) {

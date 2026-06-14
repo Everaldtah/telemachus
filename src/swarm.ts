@@ -15,6 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import type { Config } from "./config";
+import { providerKeys } from "./config";
 import type { Message, ToolSpec } from "./types";
 import { createProvider } from "./providers";
 import { functionalModels, labelFor } from "./models";
@@ -177,7 +178,7 @@ async function decompose(
     `- Each "detail" names a CONCRETE, VERIFIABLE deliverable.\n` +
     `- Use "dependsOn" for subtasks that need another's RESULT first; prefer breadth (parallelizable, no deps).\n` +
     `- Return AT LEAST 2 subtasks unless the task is genuinely atomic.\n\n` + PLAN_SCHEMA_HINT;
-  const provider = createProvider(leadModel, { nvidia: config.nvidiaKey, openrouter: config.openrouterKey });
+  const provider = createProvider(leadModel, providerKeys(config));
   const messages: Message[] = [
     { role: "system", content: PLANNER_SYSTEM },
     { role: "user", content: prompt },
@@ -362,7 +363,7 @@ async function runSubagent(
   emit({ t: Date.now(), type: "assign", pane: entry.pane, id: entry.id, role: entry.role, detail: entry.detail, model: labelFor(entry.model) });
   emit({ t: Date.now(), type: "status", pane: entry.pane, status: "running" });
 
-  const provider = createProvider(entry.model, { nvidia: config.nvidiaKey, openrouter: config.openrouterKey });
+  const provider = createProvider(entry.model, providerKeys(config));
   const context = digestFor(entries, entry);
   const prompt =
     `OVERALL TASK:\n${task}\n\nYOU ARE ONE AGENT IN A COORDINATED TEAM. Focus ONLY on your subtask.\n\n` +
@@ -417,7 +418,7 @@ async function runSubagent(
 async function synthesize(config: Config, leadModel: string, task: string, results: Entry[], signal: AbortSignal | undefined): Promise<string> {
   if (results.length === 1) return results[0].result;
   const blocks = results.map((r) => `### [${r.id}] ${r.role}\n${r.result}`).join("\n\n");
-  const provider = createProvider(leadModel, { nvidia: config.nvidiaKey, openrouter: config.openrouterKey });
+  const provider = createProvider(leadModel, providerKeys(config));
   const messages: Message[] = [
     { role: "system", content: SYNTH_SYSTEM },
     { role: "user", content: `OVERALL TASK:\n${task}\n\nA team completed these subtasks. Write ONE integrated Markdown report (summary, files+paths, key code in fenced blocks, how to run):\n\n${blocks}\n\n--- Write the integrated report below. ---` },

@@ -4,14 +4,18 @@
  * provider's live /models endpoint currently reports — so dead/EOL models (e.g. a
  * retired NIM model returning 410) never appear.
  *
- * NOTE: when Telemachus runs in a Daytona sandbox (EU region), NVIDIA NIM
- * (integrate.api.nvidia.com) is UNREACHABLE — the egress resets the TCP connection
- * (verified 2026-06-13), causing "fetch failed". OpenRouter is reachable, so the
- * catalog and default model are OpenRouter-only. Every entry below was verified with
- * a real chat completion FROM THE SANDBOX. (NVIDIA refs still work via the provider
- * if you ever run the bot somewhere with NVIDIA egress.)
+ * Both providers are enabled (fresh keys, 2026-06-14): OpenRouter frontier models
+ * (default + primary, proven reachable from the Daytona EU sandbox) AND NVIDIA NIM
+ * (minimaxai/minimax-m3, verified working with the new key from a machine with NVIDIA
+ * egress). CAVEAT: from the Daytona EU host, integrate.api.nvidia.com may still reset
+ * the TCP connection (observed 2026-06-13 → "fetch failed"); if so, NVIDIA models will
+ * be filtered out by the live /models probe in functionalModels() and OpenRouter stays
+ * the working path. NVIDIA picks therefore work best when the bot runs somewhere with
+ * NVIDIA egress (e.g. off-Daytona). The OpenRouter entries below were verified with a
+ * real chat completion FROM THE SANDBOX.
  */
 import type { Config } from "./config";
+import { providerKeys } from "./config";
 import { createProvider } from "./providers";
 
 export interface CatalogModel {
@@ -19,15 +23,26 @@ export interface CatalogModel {
   label: string; // short display label
 }
 
-/** Strong coding/reasoning frontier models — all verified functional via OpenRouter
- *  from inside the Daytona sandbox (2026-06-13). */
+/** Strong coding/reasoning frontier models. OpenRouter entries verified from inside the
+ *  Daytona sandbox (2026-06-13). NVIDIA NIM entries verified 2026-06-14 with real chat
+ *  completions on the new key AND reachable from the Daytona host via the Vercel NIM proxy
+ *  (NVIDIA_BASE_URL → telemachus-dashboard.vercel.app/api/nim). functionalModels() live-probes
+ *  each provider's /models list, so anything temporarily unserved is hidden automatically. */
 export const CANDIDATES: CatalogModel[] = [
   { ref: "openrouter:moonshotai/kimi-k2.7-code", label: "kimi-k2.7-code (openrouter)" },
+  // NVIDIA NIM frontier — best general/coding models, each verified to serve completions.
+  { ref: "nvidia:minimaxai/minimax-m3", label: "minimax-m3 (nvidia nim)" },
+  { ref: "nvidia:moonshotai/kimi-k2.6", label: "kimi-k2.6 (nvidia nim)" },
+  { ref: "nvidia:qwen/qwen3.5-397b-a17b", label: "qwen3.5-397b (nvidia nim)" },
+  { ref: "nvidia:mistralai/mistral-large-3-675b-instruct-2512", label: "mistral-large-3-675b (nvidia nim)" },
+  { ref: "nvidia:meta/llama-4-maverick-17b-128e-instruct", label: "llama-4-maverick (nvidia nim)" },
+  { ref: "nvidia:openai/gpt-oss-120b", label: "gpt-oss-120b (nvidia nim)" },
+  { ref: "nvidia:z-ai/glm-5.1", label: "glm-5.1 (nvidia nim)" },
+  // OpenRouter frontier (default + fallbacks).
   { ref: "openrouter:moonshotai/kimi-k2", label: "kimi-k2 (openrouter)" },
   { ref: "openrouter:deepseek/deepseek-chat", label: "deepseek-v3 chat (openrouter)" },
   { ref: "openrouter:deepseek/deepseek-r1", label: "deepseek-r1 (openrouter)" },
   { ref: "openrouter:qwen/qwen-2.5-coder-32b-instruct", label: "qwen2.5-coder-32b (openrouter)" },
-  { ref: "openrouter:qwen/qwen-2.5-72b-instruct", label: "qwen2.5-72b (openrouter)" },
   { ref: "openrouter:meta-llama/llama-3.3-70b-instruct", label: "llama-3.3-70b (openrouter)" },
   { ref: "openrouter:google/gemini-2.5-flash", label: "gemini-2.5-flash (openrouter)" },
   { ref: "openrouter:openai/gpt-4o-mini", label: "gpt-4o-mini (openrouter)" },
@@ -44,7 +59,7 @@ function normalize(ref: string): string {
  * key works.
  */
 export async function functionalModels(config: Config): Promise<CatalogModel[]> {
-  const keys = { nvidia: config.nvidiaKey, openrouter: config.openrouterKey };
+  const keys = providerKeys(config);
   const haveNvidia = !!config.nvidiaKey;
   const haveOpenRouter = !!config.openrouterKey;
 

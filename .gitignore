@@ -1,5 +1,6 @@
 node_modules/
 dist/
+scripts/*.tgz
 .env
 *.log
 npm-debug.log*

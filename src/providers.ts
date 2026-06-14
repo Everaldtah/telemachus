@@ -168,10 +168,14 @@ function parseToolCalls(raw: any): ToolCall[] | undefined {
   return calls.length ? calls : undefined;
 }
 
-export function createProvider(ref: string, keys: { nvidia: string; openrouter: string }): Provider {
+export function createProvider(
+  ref: string,
+  keys: { nvidia: string; openrouter: string; nvidiaBaseUrl?: string }
+): Provider {
   const { kind, model } = parseModelRef(ref);
   if (kind === "openrouter") {
     return new OpenAICompatibleProvider("openrouter", model, OPENROUTER_BASE, keys.openrouter);
   }
-  return new OpenAICompatibleProvider("nvidia", model, NVIDIA_BASE, keys.nvidia);
+  const nvidiaBase = (keys.nvidiaBaseUrl || NVIDIA_BASE).replace(/\/+$/, "");
+  return new OpenAICompatibleProvider("nvidia", model, nvidiaBase, keys.nvidia);
 }

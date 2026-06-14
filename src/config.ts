@@ -33,6 +33,10 @@ export interface Config {
   daytonaVolumeMount: string;
   nvidiaKey: string;
   openrouterKey: string;
+  /** Base URL for NVIDIA NIM. Default = the direct endpoint; set to the Vercel NIM proxy
+   *  (e.g. https://telemachus-dashboard.vercel.app/api/nim) when egress to NVIDIA is blocked
+   *  (Daytona EU). Must NOT include a trailing slash or /chat/completions. */
+  nvidiaBaseUrl: string;
   defaultModel: string;
   maxSteps: number;
   execTimeoutS: number;
@@ -58,11 +62,18 @@ export function loadConfig(): Config {
     daytonaVolumeMount: process.env.DAYTONA_VOLUME_MOUNT || "/data",
     nvidiaKey: process.env.NVIDIA_API_KEY || "",
     openrouterKey: process.env.OPENROUTER_API_KEY || "",
+    nvidiaBaseUrl: (process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, ""),
     defaultModel: process.env.TELEMACHUS_MODEL || "openrouter:moonshotai/kimi-k2.7-code",
     maxSteps: Math.max(1, parseInt(process.env.TELEMACHUS_MAX_STEPS || "12", 10)),
     execTimeoutS: Math.max(5, parseInt(process.env.TELEMACHUS_EXEC_TIMEOUT_S || "180", 10)),
     dashboardUrl: (process.env.DASHBOARD_URL || "").replace(/\/+$/, ""),
   };
+}
+
+/** Provider key/base bundle passed to createProvider(). One source of truth so the NVIDIA
+ *  base URL (direct vs proxy) is threaded everywhere. */
+export function providerKeys(c: Config): { nvidia: string; openrouter: string; nvidiaBaseUrl: string } {
+  return { nvidia: c.nvidiaKey, openrouter: c.openrouterKey, nvidiaBaseUrl: c.nvidiaBaseUrl };
 }
 
 /** Human-readable list of what's missing, for a friendly startup error. */
