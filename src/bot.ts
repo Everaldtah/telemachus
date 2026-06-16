@@ -289,6 +289,7 @@ export class TelemachusBot {
           execTimeoutMs: this.config.execTimeoutS * 1000,
           signal: s.abort.signal,
           webProxyUrl: this.config.webProxyUrl,
+          moltbookProxyUrl: this.config.moltbookProxyUrl,
           vision: this.config.openrouterKey
             ? { apiKey: this.config.openrouterKey, model: this.config.visionModel, baseUrl: "https://openrouter.ai/api/v1" }
             : undefined,

@@ -21,6 +21,10 @@ export const SYSTEM_PROMPT =
   "connection RESET. To read a web page or call any public HTTP/HTTPS API, use the web_fetch tool " +
   "(it routes through a proxy with full internet access). Do NOT curl external URLs expecting them to " +
   "work; reach for web_fetch instead.\n\n" +
+  "MOLTBOOK: you have an identity (\"telemachus\") on Moltbook, the social network for AI agents. When " +
+  "asked to check/use Moltbook (or to post/comment/upvote/search there), use the moltbook tool — start " +
+  "with path 'home' to see your dashboard, then engage. Your API key is injected by the proxy; never " +
+  "handle or send it yourself.\n\n" +
   "Doctrine:\n" +
   "- Deliver COMPLETE, production-grade work: full implementations with edge cases, error handling, and " +
   "validation. NO stubs, NO TODOs, NO placeholders.\n" +
@@ -75,6 +79,53 @@ const WEB_FETCH: ToolSpec = {
     required: ["url"],
   },
 };
+
+const MOLTBOOK: ToolSpec = {
+  name: "moltbook",
+  description:
+    "Use Moltbook — the social network for AI agents (post, comment, upvote, follow, submolts, " +
+    "semantic search). Calls are authenticated automatically: your API key is injected server-side, " +
+    "so NEVER include a key, token, or Authorization header. `path` is relative to the Moltbook API " +
+    "(/api/v1) — e.g. 'home', 'feed?sort=hot&limit=15', 'posts', 'posts/POST_ID/comments', " +
+    "'posts/POST_ID/upvote', 'search?q=...', 'verify'.\n" +
+    "Routine: start with GET 'home' (your dashboard: notifications, activity, what to do next). Engage " +
+    "more than you broadcast — upvote/comment beat new posts. To create a post: POST 'posts' " +
+    "{submolt_name,title,content}. If a create response has verification_required, SOLVE the " +
+    "math word problem in verification.challenge_text and POST 'verify' " +
+    "{verification_code, answer:'<number, 2 decimals>'} to publish. Respect rate limits (1 post/30min).",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Moltbook API path relative to /api/v1, e.g. 'home' or 'posts/ID/comments'." },
+      method: { type: "string", description: "HTTP method (default GET): GET/POST/PATCH/DELETE." },
+      body: { type: "object", description: "JSON request body for POST/PATCH (object)." },
+    },
+    required: ["path"],
+  },
+};
+
+/** Call the Moltbook API through the key-injecting Vercel proxy. */
+async function doMoltbook(
+  proxyUrl: string,
+  args: Record<string, any>,
+  signal?: AbortSignal
+): Promise<{ ok: boolean; status: number | null; text: string }> {
+  const path = String(args?.path ?? "").trim().replace(/^\/+/, "").replace(/^api\/v1\/?/, "");
+  if (!path) return { ok: false, status: null, text: "moltbook: 'path' is required (e.g. 'home', 'posts')." };
+  const method = String(args?.method ?? "GET").toUpperCase();
+  const init: RequestInit = { method, signal };
+  if (args?.body != null && method !== "GET" && method !== "HEAD") {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = typeof args.body === "string" ? args.body : JSON.stringify(args.body);
+  }
+  try {
+    const resp = await fetch(`${proxyUrl}/${path}`, init);
+    const text = await resp.text();
+    return { ok: resp.ok, status: resp.status, text };
+  } catch (err) {
+    return { ok: false, status: null, text: `moltbook failed: ${(err as Error).message}` };
+  }
+}
 
 /** Perform a web fetch via the Vercel proxy (the host reaches Vercel; Vercel reaches the internet). */
 async function doWebFetch(
@@ -225,6 +276,8 @@ export interface RunAgentOptions {
   webProxyUrl?: string;
   /** Vision config for screenshot analysis (OpenRouter multimodal model). */
   vision?: { apiKey: string; model: string; baseUrl: string };
+  /** Moltbook proxy URL. When set, the agent gets a moltbook tool for the AI-agent social network. */
+  moltbookProxyUrl?: string;
 }
 
 /**
@@ -241,7 +294,9 @@ export async function runAgent(
   const convo = [...history];
   let finalText = "";
   let steps = 0;
-  const tools: ToolSpec[] = opts.webProxyUrl ? [RUN_SHELL, WEB_FETCH] : [RUN_SHELL];
+  const tools: ToolSpec[] = [RUN_SHELL];
+  if (opts.webProxyUrl) tools.push(WEB_FETCH);
+  if (opts.moltbookProxyUrl) tools.push(MOLTBOOK);
 
   for (let step = 0; step <= opts.maxSteps; step++) {
     if (opts.signal?.aborted) return { text: finalText, steps, files: [], stopped: true };
@@ -293,6 +348,18 @@ export async function runAgent(
         }
         onProgress("output", content.length > 600 ? content.slice(0, 600) + "…" : content);
         convo.push({ role: "tool", content, tool_call_id: tc.id, name: "web_fetch" });
+        continue;
+      }
+
+      // ── moltbook: the AI-agent social network (key injected by the proxy). ──
+      if (tc.name === "moltbook" && opts.moltbookProxyUrl) {
+        const a = tc.arguments ?? {};
+        onProgress("cmd", `🦞 moltbook ${String(a.method ?? "GET").toUpperCase()} ${a.path ?? ""}`);
+        const w = await doMoltbook(opts.moltbookProxyUrl, a, opts.signal);
+        const body = (w.text || "").slice(0, 6000);
+        const content = `HTTP ${w.status ?? "?"} ok=${w.ok}\n${body}${w.text.length > 6000 ? "\n…[truncated]" : ""}`;
+        onProgress("output", content.length > 600 ? content.slice(0, 600) + "…" : content);
+        convo.push({ role: "tool", content, tool_call_id: tc.id, name: "moltbook" });
         continue;
       }
 

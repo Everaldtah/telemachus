@@ -48,6 +48,10 @@ export interface Config {
   webProxyUrl: string;
   /** OpenRouter multimodal model used to analyze web_fetch screenshots. */
   visionModel: string;
+  /** Moltbook proxy URL (Vercel) — injects the API key server-side so the agent can use
+   *  the AI-agent social network without the key ever touching the sandbox. Default derives
+   *  from DASHBOARD_URL (+/api/moltbook); override with MOLTBOOK_PROXY_URL. "" disables. */
+  moltbookProxyUrl: string;
 }
 
 export function loadConfig(): Config {
@@ -75,7 +79,16 @@ export function loadConfig(): Config {
     dashboardUrl: (process.env.DASHBOARD_URL || "").replace(/\/+$/, ""),
     webProxyUrl: resolveWebProxyUrl(),
     visionModel: process.env.VISION_MODEL || "google/gemini-2.5-flash",
+    moltbookProxyUrl: resolveMoltbookProxyUrl(),
   };
+}
+
+/** Moltbook proxy URL: explicit MOLTBOOK_PROXY_URL wins; otherwise derive from DASHBOARD_URL. */
+function resolveMoltbookProxyUrl(): string {
+  const explicit = (process.env.MOLTBOOK_PROXY_URL || "").replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const dash = (process.env.DASHBOARD_URL || "").replace(/\/+$/, "");
+  return dash ? `${dash}/api/moltbook` : "";
 }
 
 /** Web fetch proxy URL: explicit WEB_PROXY_URL wins; otherwise derive from DASHBOARD_URL. */
