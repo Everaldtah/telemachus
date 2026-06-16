@@ -284,7 +284,15 @@ export class TelemachusBot {
         this.provider(s),
         s.history,
         s.sandbox,
-        { maxSteps: this.config.maxSteps, execTimeoutMs: this.config.execTimeoutS * 1000, signal: s.abort.signal },
+        {
+          maxSteps: this.config.maxSteps,
+          execTimeoutMs: this.config.execTimeoutS * 1000,
+          signal: s.abort.signal,
+          webProxyUrl: this.config.webProxyUrl,
+          vision: this.config.openrouterKey
+            ? { apiKey: this.config.openrouterKey, model: this.config.visionModel, baseUrl: "https://openrouter.ai/api/v1" }
+            : undefined,
+        },
         (kind, data) => {
           if (kind === "think") {
             this.tg.sendChatAction(chatId, "typing");

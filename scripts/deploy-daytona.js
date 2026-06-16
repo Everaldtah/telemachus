@@ -76,6 +76,8 @@ async function waitStarted(id, ms = 150000) {
     TELEMACHUS_MODEL: c.defaultModel,
   };
   if (c.dashboardUrl) env.DASHBOARD_URL = c.dashboardUrl;
+  if (c.webProxyUrl) env.WEB_PROXY_URL = c.webProxyUrl;
+  if (c.visionModel) env.VISION_MODEL = c.visionModel;
   if (c.openrouterKey) env.OPENROUTER_API_KEY = c.openrouterKey;
   if (c.daytonaVolume) { env.DAYTONA_VOLUME = c.daytonaVolume; env.DAYTONA_VOLUME_MOUNT = c.daytonaVolumeMount; }
 

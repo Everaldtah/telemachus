@@ -42,6 +42,12 @@ export interface Config {
   execTimeoutS: number;
   /** Base URL of the swarm dashboard website (Vercel). Used to build per-session links. */
   dashboardUrl: string;
+  /** Generic HTTP fetch proxy (Vercel) that gives the sandboxed agent general internet
+   *  access — the Daytona EU sandbox resets direct egress, but reaches Vercel. Default
+   *  derives from DASHBOARD_URL (+/api/fetch); override with WEB_PROXY_URL. "" disables. */
+  webProxyUrl: string;
+  /** OpenRouter multimodal model used to analyze web_fetch screenshots. */
+  visionModel: string;
 }
 
 export function loadConfig(): Config {
@@ -67,7 +73,17 @@ export function loadConfig(): Config {
     maxSteps: Math.max(1, parseInt(process.env.TELEMACHUS_MAX_STEPS || "12", 10)),
     execTimeoutS: Math.max(5, parseInt(process.env.TELEMACHUS_EXEC_TIMEOUT_S || "180", 10)),
     dashboardUrl: (process.env.DASHBOARD_URL || "").replace(/\/+$/, ""),
+    webProxyUrl: resolveWebProxyUrl(),
+    visionModel: process.env.VISION_MODEL || "google/gemini-2.5-flash",
   };
+}
+
+/** Web fetch proxy URL: explicit WEB_PROXY_URL wins; otherwise derive from DASHBOARD_URL. */
+function resolveWebProxyUrl(): string {
+  const explicit = (process.env.WEB_PROXY_URL || "").replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const dash = (process.env.DASHBOARD_URL || "").replace(/\/+$/, "");
+  return dash ? `${dash}/api/fetch` : "";
 }
 
 /** Provider key/base bundle passed to createProvider(). One source of truth so the NVIDIA
