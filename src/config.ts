@@ -52,6 +52,9 @@ export interface Config {
    *  the AI-agent social network without the key ever touching the sandbox. Default derives
    *  from DASHBOARD_URL (+/api/moltbook); override with MOLTBOOK_PROXY_URL. "" disables. */
   moltbookProxyUrl: string;
+  /** Vercel deploy token. Injected into the agent's sandbox env (VERCEL_TOKEN) so it can
+   *  run `vercel deploy --token=$VERCEL_TOKEN` on request. Blank = not provisioned. */
+  vercelToken: string;
 }
 
 export function loadConfig(): Config {
@@ -80,6 +83,7 @@ export function loadConfig(): Config {
     webProxyUrl: resolveWebProxyUrl(),
     visionModel: process.env.VISION_MODEL || "google/gemini-2.5-flash",
     moltbookProxyUrl: resolveMoltbookProxyUrl(),
+    vercelToken: process.env.VERCEL_TOKEN || "",
   };
 }
 

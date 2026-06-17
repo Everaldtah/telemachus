@@ -80,6 +80,8 @@ async function waitStarted(id, ms = 150000) {
   if (c.visionModel) env.VISION_MODEL = c.visionModel;
   // NOTE: the Moltbook API key is NOT injected — it lives only in the Vercel proxy env.
   if (c.moltbookProxyUrl) env.MOLTBOOK_PROXY_URL = c.moltbookProxyUrl;
+  // Vercel deploy token so the agent can `vercel deploy --token=$VERCEL_TOKEN` on request.
+  if (c.vercelToken) env.VERCEL_TOKEN = c.vercelToken;
   if (c.openrouterKey) env.OPENROUTER_API_KEY = c.openrouterKey;
   if (c.daytonaVolume) { env.DAYTONA_VOLUME = c.daytonaVolume; env.DAYTONA_VOLUME_MOUNT = c.daytonaVolumeMount; }
 

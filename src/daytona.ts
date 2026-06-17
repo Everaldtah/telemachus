@@ -22,6 +22,8 @@ export interface DaytonaOptions {
   volumeName?: string;
   /** Mount path for the volume inside the sandbox (default /data). */
   volumeMount?: string;
+  /** Extra environment variables injected into the sandbox (e.g. VERCEL_TOKEN for deploys). */
+  env?: Record<string, string>;
 }
 
 export class DaytonaSandbox {
@@ -72,6 +74,11 @@ export class DaytonaSandbox {
           autoStopInterval: 30,
           autoDeleteInterval: 1440,
         };
+        // Inject extra env (e.g. VERCEL_TOKEN) so the agent's shell can use it.
+        const env = Object.fromEntries(
+          Object.entries(this.opts.env ?? {}).filter(([, v]) => v != null && v !== "")
+        );
+        if (Object.keys(env).length) body.env = env;
         if (this.opts.snapshot) body.snapshot = this.opts.snapshot;
         if (this.opts.target) body.target = this.opts.target;
         if (this.opts.diskGb && this.opts.diskGb > 0) body.disk = this.opts.diskGb;

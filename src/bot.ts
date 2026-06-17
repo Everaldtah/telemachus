@@ -107,6 +107,7 @@ export class TelemachusBot {
           diskGb: this.config.daytonaDiskGb,
           volumeName: this.config.daytonaVolume,
           volumeMount: this.config.daytonaVolumeMount,
+          env: this.config.vercelToken ? { VERCEL_TOKEN: this.config.vercelToken } : undefined,
         }),
         busy: false,
       };
